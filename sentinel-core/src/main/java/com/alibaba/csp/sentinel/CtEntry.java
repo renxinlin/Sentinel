@@ -45,7 +45,6 @@ class CtEntry extends Entry {
         super(resourceWrapper);
         this.chain = chain;
         this.context = context;
-
         setUpEntryFor(context);
     }
 

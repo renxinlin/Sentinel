@@ -39,6 +39,27 @@ public class DefaultSlotChainBuilder implements SlotChainBuilder {
 
         // Note: the instances of ProcessorSlot should be different, since they are not stateless.
         List<ProcessorSlot> sortedSlotList = SpiLoader.loadPrototypeInstanceListSorted(ProcessorSlot.class);
+
+
+        /**
+         * spi结果:
+         *
+         * com.alibaba.csp.sentinel.slots.nodeselector.NodeSelectorSlot
+         *
+         * com.alibaba.csp.sentinel.slots.clusterbuilder.ClusterBuilderSlot
+         *
+         * com.alibaba.csp.sentinel.slots.logger.LogSlot
+         * 统计
+         * com.alibaba.csp.sentinel.slots.statistic.StatisticSlot
+         * 授权 白名单 黑名单
+         * com.alibaba.csp.sentinel.slots.block.authority.AuthoritySlot
+         * 系统
+         * com.alibaba.csp.sentinel.slots.system.SystemSlot
+         * 限流
+         * com.alibaba.csp.sentinel.slots.block.flow.FlowSlot
+         * 降级
+         * com.alibaba.csp.sentinel.slots.block.degrade.DegradeSlot
+         */
         for (ProcessorSlot slot : sortedSlotList) {
             if (!(slot instanceof AbstractLinkedProcessorSlot)) {
                 RecordLog.warn("The ProcessorSlot(" + slot.getClass().getCanonicalName() + ") is not an instance of AbstractLinkedProcessorSlot, can't be added into ProcessorSlotChain");

@@ -15,22 +15,17 @@
  */
 package com.alibaba.csp.sentinel;
 
-import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
-
-import com.alibaba.csp.sentinel.log.RecordLog;
 import com.alibaba.csp.sentinel.context.Context;
 import com.alibaba.csp.sentinel.context.ContextUtil;
 import com.alibaba.csp.sentinel.context.NullContext;
-import com.alibaba.csp.sentinel.slotchain.MethodResourceWrapper;
-import com.alibaba.csp.sentinel.slotchain.ProcessorSlot;
-import com.alibaba.csp.sentinel.slotchain.ProcessorSlotChain;
-import com.alibaba.csp.sentinel.slotchain.ResourceWrapper;
-import com.alibaba.csp.sentinel.slotchain.SlotChainProvider;
-import com.alibaba.csp.sentinel.slotchain.StringResourceWrapper;
+import com.alibaba.csp.sentinel.log.RecordLog;
+import com.alibaba.csp.sentinel.slotchain.*;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.alibaba.csp.sentinel.slots.block.Rule;
+
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * {@inheritDoc}
@@ -43,15 +38,41 @@ import com.alibaba.csp.sentinel.slots.block.Rule;
 public class CtSph implements Sph {
 
     private static final Object[] OBJECTS0 = new Object[0];
-
+    private static final Object LOCK = new Object();
     /**
      * Same resource({@link ResourceWrapper#equals(Object)}) will share the same
      * {@link ProcessorSlotChain}, no matter in which {@link Context}.
      */
     private static volatile Map<ResourceWrapper, ProcessorSlotChain> chainMap
-        = new HashMap<ResourceWrapper, ProcessorSlotChain>();
+            = new HashMap<ResourceWrapper, ProcessorSlotChain>();
 
-    private static final Object LOCK = new Object();
+    /**
+     * Get current size of created slot chains.
+     *
+     * @return size of created slot chains
+     * @since 0.2.0
+     */
+    public static int entrySize() {
+        return chainMap.size();
+    }
+
+    /**
+     * Reset the slot chain map. Only for internal test.
+     *
+     * @since 0.2.0
+     */
+    static void resetChainMap() {
+        chainMap.clear();
+    }
+
+    /**
+     * Only for internal test.
+     *
+     * @since 0.2.0
+     */
+    static Map<ResourceWrapper, ProcessorSlotChain> getChainMap() {
+        return chainMap;
+    }
 
     private AsyncEntry asyncEntryWithNoChain(ResourceWrapper resourceWrapper, Context context) {
         AsyncEntry entry = new AsyncEntry(resourceWrapper, null, context);
@@ -110,14 +131,18 @@ public class CtSph implements Sph {
     }
 
     private AsyncEntry asyncEntryInternal(ResourceWrapper resourceWrapper, int count, Object... args)
-        throws BlockException {
+            throws BlockException {
         return asyncEntryWithPriorityInternal(resourceWrapper, count, false, args);
     }
 
     private Entry entryWithPriority(ResourceWrapper resourceWrapper, int count, boolean prioritized, Object... args)
-        throws BlockException {
+            throws BlockException {
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ///////1.对参数和全局配置项做检测，如果不符合要求就直接返回了一个CtEntry对象，不会再进行后面的限流检测，否则进入下面的检测流程 //////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         Context context = ContextUtil.getContext();
         if (context instanceof NullContext) {
+            // 当上下文超过数量 则直接返回一个entry 不在进行规则检查
             // The {@link NullContext} indicates that the amount of context has exceeded the threshold,
             // so here init the entry only. No rule checking will be done.
             return new CtEntry(resourceWrapper, null, context);
@@ -125,31 +150,62 @@ public class CtSph implements Sph {
 
         if (context == null) {
             // Using default context.
+            // 使用默认上下文
             context = InternalContextUtil.internalEnter(Constants.CONTEXT_DEFAULT_NAME);
         }
 
         // Global switch is close, no rule checking will do.
         if (!Constants.ON) {
+            // 全局开关关闭则
             return new CtEntry(resourceWrapper, null, context);
         }
-
+        // 获取该资源对应的SlotChain[链表，责任链]
+        // 根据包装过的资源对象获取对应的SlotChain
         ProcessorSlot<Object> chain = lookProcessChain(resourceWrapper);
 
         /*
          * Means amount of resources (slot chain) exceeds {@link Constants.MAX_SLOT_CHAIN_SIZE},
          * so no rule checking will be done.
          */
+        //在生成chain的里面有个判断，如果chainMap.size大于一个值就返回null，也不进行规则检测
         if (chain == null) {
             return new CtEntry(resourceWrapper, null, context);
         }
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // 执行SlotChain的entry方法
+        // 如果SlotChain的entry方法抛出了BlockException，则将该异常继续向上抛出
+        // 如果SlotChain的entry方法正常执行了，则最后会将该entry对象返回
+
+        // 限流核心  创建entry  判断是否需要限流
         Entry e = new CtEntry(resourceWrapper, chain, context);
         try {
+            //开始检验规则
+            /**
+             *
+             *
+             * 每个ProcessorSlot 的entry()方法负责真正的业务处理部分
+             *
+             * NodeSelectorSlot 负责收集资源的路径，并将这些资源的调用路径，以树状结构存储起来，用于根据调用路径来限流降级；
+             * ClusterBuilderSlot 则用于存储资源的统计信息以及调用者信息，例如该资源的 RT, QPS, thread count 等等，这些信息将用作为多维度限流，降级的依据；
+             * StatistcSlot 则用于记录，统计不同纬度的 runtime 信息；
+             *
+             *
+             * FlowSlot 则用于根据预设的限流规则，以及前面 slot 统计的状态，来进行限流；
+             * AuthorizationSlot 则根据黑白名单，来做黑白名单控制；
+             * DegradeSlot 则通过统计信息，以及预设的规则，来做熔断降级；
+             * SystemSlot 则通过系统的状态，例如 load1 等，来控制总的入口流量；
+             *
+             *
+             */
             chain.entry(context, resourceWrapper, null, count, prioritized, args);
         } catch (BlockException e1) {
+            //限流了，往上抛，这里exit了，而外界finally需要判空再exit
             e.exit(count, args);
             throw e1;
         } catch (Throwable e1) {
+            // 防御性编程  用来处理异常
             // This should not happen, unless there are errors existing in Sentinel internal.
             RecordLog.info("Sentinel unexpected exception", e1);
         }
@@ -201,10 +257,11 @@ public class CtSph implements Sph {
                     if (chainMap.size() >= Constants.MAX_SLOT_CHAIN_SIZE) {
                         return null;
                     }
-
+                    // 创建新的ProcessorSlotChain
                     chain = SlotChainProvider.newSlotChain();
+                    // 这个方法用于找到大于等于initialCapacity的最小的2的幂
                     Map<ResourceWrapper, ProcessorSlotChain> newMap = new HashMap<ResourceWrapper, ProcessorSlotChain>(
-                        chainMap.size() + 1);
+                            chainMap.size() + 1);
                     newMap.putAll(chainMap);
                     newMap.put(resourceWrapper, chain);
                     chainMap = newMap;
@@ -212,47 +269,6 @@ public class CtSph implements Sph {
             }
         }
         return chain;
-    }
-
-    /**
-     * Get current size of created slot chains.
-     *
-     * @return size of created slot chains
-     * @since 0.2.0
-     */
-    public static int entrySize() {
-        return chainMap.size();
-    }
-
-    /**
-     * Reset the slot chain map. Only for internal test.
-     *
-     * @since 0.2.0
-     */
-    static void resetChainMap() {
-        chainMap.clear();
-    }
-
-    /**
-     * Only for internal test.
-     *
-     * @since 0.2.0
-     */
-    static Map<ResourceWrapper, ProcessorSlotChain> getChainMap() {
-        return chainMap;
-    }
-
-    /**
-     * This class is used for skip context name checking.
-     */
-    private final static class InternalContextUtil extends ContextUtil {
-        static Context internalEnter(String name) {
-            return trueEnter(name, "");
-        }
-
-        static Context internalEnter(String name, String origin) {
-            return trueEnter(name, origin);
-        }
     }
 
     @Override
@@ -329,21 +345,25 @@ public class CtSph implements Sph {
 
     @Override
     public Entry entryWithPriority(String name, EntryType type, int count, boolean prioritized, Object... args)
-        throws BlockException {
+            throws BlockException {
         StringResourceWrapper resource = new StringResourceWrapper(name, type);
         return entryWithPriority(resource, count, prioritized, args);
     }
 
     @Override
     public Entry entryWithType(String name, int resourceType, EntryType entryType, int count, Object[] args)
-        throws BlockException {
+            throws BlockException {
+        //
         return entryWithType(name, resourceType, entryType, count, false, args);
     }
 
     @Override
     public Entry entryWithType(String name, int resourceType, EntryType entryType, int count, boolean prioritized,
                                Object[] args) throws BlockException {
+        // 构建资源对象
         StringResourceWrapper resource = new StringResourceWrapper(name, entryType, resourceType);
+        // 返回资源【操作对象】    prioritized 表示具有优先级的资源操作对象
+        // false表示当前访问不需要等待一定时间  true表示当前访问必须等待一定时间才能进行【根据优先级计算等待时间】
         return entryWithPriority(resource, count, prioritized, args);
     }
 
@@ -352,5 +372,18 @@ public class CtSph implements Sph {
                                          boolean prioritized, Object[] args) throws BlockException {
         StringResourceWrapper resource = new StringResourceWrapper(name, entryType, resourceType);
         return asyncEntryWithPriorityInternal(resource, count, prioritized, args);
+    }
+
+    /**
+     * This class is used for skip context name checking.
+     */
+    private final static class InternalContextUtil extends ContextUtil {
+        static Context internalEnter(String name) {
+            return trueEnter(name, "");
+        }
+
+        static Context internalEnter(String name, String origin) {
+            return trueEnter(name, origin);
+        }
     }
 }

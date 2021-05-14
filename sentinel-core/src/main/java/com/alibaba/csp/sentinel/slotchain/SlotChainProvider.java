@@ -39,7 +39,10 @@ public final class SlotChainProvider {
         if (slotChainBuilder != null) {
             return slotChainBuilder.build();
         }
-
+        /**
+         * spi和默认的都是:
+         * DefaultSlotChainBuilder
+         */
         // Resolve the slot chain builder SPI.
         slotChainBuilder = SpiLoader.loadFirstInstanceOrDefault(SlotChainBuilder.class, DefaultSlotChainBuilder.class);
 

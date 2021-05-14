@@ -22,7 +22,7 @@ import com.alibaba.csp.sentinel.slots.block.Rule;
 import com.alibaba.csp.sentinel.slots.system.SystemRule;
 
 /**
- * <p>The fundamental Sentinel API for recording statistics and performing rule checking for resources.</p>
+ * <p>The fundamental sentinel API for recording statistics and for resources.</p>
  * <p>
  * Conceptually, physical or logical resource that need protection should be
  * surrounded by an entry. The requests to this resource will be blocked if any
@@ -75,6 +75,13 @@ public class SphU {
     private SphU() {}
 
     /**
+     *
+     * @desc: 方法会去申请一个entry，如果能够申请成功，则说明没有被限流，否则会抛出BlockException，表示已经被限流
+     *
+     * 运行时
+     * 1 记录统计信息
+     * 2 运行时的规则检查
+     *
      * Record statistics and perform rule checking for the given resource.
      *
      * @param name the unique name of the protected resource
@@ -82,6 +89,7 @@ public class SphU {
      * @throws BlockException if the block criteria is met (e.g. metric exceeded the threshold of any rules)
      */
     public static Entry entry(String name) throws BlockException {
+        // Sph
         return Env.sph.entry(name, EntryType.OUT, 1, OBJECTS0);
     }
 
@@ -291,6 +299,10 @@ public class SphU {
      * @since 1.7.0
      */
     public static Entry entry(String name, int resourceType, EntryType trafficType) throws BlockException {
+        /**
+         * batchCount 表示当前请求流量增加多少 比如http qps 一次请求增加1
+         *
+         */
         return Env.sph.entryWithType(name, resourceType, trafficType, 1, OBJECTS0);
     }
 

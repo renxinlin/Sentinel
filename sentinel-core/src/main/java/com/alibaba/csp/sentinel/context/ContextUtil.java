@@ -117,12 +117,40 @@ public class ContextUtil {
         return trueEnter(name, origin);
     }
 
+    /**
+     *
+     * 1.先从ThreadLocal中获取，如果能获取到直接返回，如果获取不到则继续第2步
+     * 2.从一个static的map中根据上下文的名称获取，如果能获取到则直接返回，否则继续第3步
+     * 3.加锁后进行一次double check，如果还是没能从map中获取到，则创建一个EntranceNode，并把该EntranceNode添加到一个全局的ROOT节点中去，然后将该节点添加到map中去(这部分代码在上述代码中省略了)
+     * 4.根据EntranceNode创建一个上下文，并将该上下文保存到ThreadLocal中去，下一个请求可以直接获取
+     *
+     *
+     * 外部没有 Context  则使用这里创建内部Context
+     * @param name
+     * @param origin
+     * @return
+     */
     protected static Context trueEnter(String name, String origin) {
+        // context是保存在ThreadLocal中的，每次执行的时候会优先到ThreadLocal中获取。如果context为null时才会再次去创建一个context。
+
+
+        /**
+         * 也就是说entry是链路关系
+         *
+         * context会被置为null并从ThreadLocal中清空 的时机
+         * 当Entry执行exit方法时，当当前entry的parent为null时，也就说明当前entry是最上层的节点了
+         * 此时要把保存在ThreadLocal中的context也清空掉
+         *
+         *
+         */
         Context context = contextHolder.get();
         if (context == null) {
+            // 如果ThreadLocal中获取不到Context
+            // 则根据name从map中获取根节点，只要是相同的资源名，就能直接从map中获取到node
             Map<String, DefaultNode> localCacheNameMap = contextNameNodeMap;
             DefaultNode node = localCacheNameMap.get(name);
             if (node == null) {
+
                 if (localCacheNameMap.size() > Constants.MAX_CONTEXT_NAME_SIZE) {
                     setNullContext();
                     return NULL_CONTEXT;
@@ -150,6 +178,7 @@ public class ContextUtil {
                     }
                 }
             }
+            // 同一个线程 同一个资源的 EntranceNode必然一样
             context = new Context(node, name);
             context.setOrigin(origin);
             contextHolder.set(context);
