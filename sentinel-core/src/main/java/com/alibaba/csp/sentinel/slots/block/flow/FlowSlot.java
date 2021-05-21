@@ -161,7 +161,7 @@ public class FlowSlot extends AbstractLinkedProcessorSlot<DefaultNode> {
     public void entry(Context context, ResourceWrapper resourceWrapper, DefaultNode node, int count,
                       boolean prioritized, Object... args) throws Throwable {
         checkFlow(resourceWrapper, context, node, count, prioritized);
-
+        // 流控之后触发降级
         fireEntry(context, resourceWrapper, node, count, prioritized, args);
     }
 

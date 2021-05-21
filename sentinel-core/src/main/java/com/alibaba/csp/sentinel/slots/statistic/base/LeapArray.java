@@ -29,8 +29,13 @@ import com.alibaba.csp.sentinel.util.TimeUtil;
  * </p>
  * <p>
  * Leap array use sliding window algorithm to count data. Each bucket cover {@code windowLengthInMs} time span,
- * and the total time span is {@link #intervalInMs}, so the total bucket amount is:
+ * and the total time span is {@link #intervalInMs},
+ *
+ * so the total bucket amount is:
  * {@code sampleCount = intervalInMs / windowLengthInMs}.
+ *
+ *
+ * 也就是说样本窗口数量  bucket数量= intervalInMs / windowLengthInMs
  * </p>
  *
  * @param <T> type of statistic data
@@ -39,12 +44,16 @@ import com.alibaba.csp.sentinel.util.TimeUtil;
  * @author Carpenter Lee
  */
 public abstract class LeapArray<T> {
-
+    // 样本窗口长度
     protected int windowLengthInMs;
+    //  bucket数量= intervalInMs / windowLengthInMs
     protected int sampleCount;
+    // 时间窗长度
     protected int intervalInMs;
-    private double intervalInSecond;
 
+    private double intervalInSecond;
+    // WindowWrap 表示一个样本窗口
+    // 泛型实际为MetricBucket 表示一个样本窗口的统计信息
     protected final AtomicReferenceArray<WindowWrap<T>> array;
 
     /**
@@ -100,6 +109,7 @@ public abstract class LeapArray<T> {
     private int calculateTimeIdx(/*@Valid*/ long timeMillis) {
         long timeId = timeMillis / windowLengthInMs;
         // Calculate current index so we can map the timestamp to the leap array.
+        // 环形数组可重复利用
         return (int)(timeId % array.length());
     }
 
@@ -117,9 +127,10 @@ public abstract class LeapArray<T> {
         if (timeMillis < 0) {
             return null;
         }
-
+        // 计算当前时间所在的样本窗口下标 在数据LeapArray 的索引
         int idx = calculateTimeIdx(timeMillis);
         // Calculate current bucket start time.
+        // 计算当前样本的开始时间点  由于是环形数组 需要windowStart来判断数组元素是否过期
         long windowStart = calculateWindowStart(timeMillis);
 
         /*
@@ -166,6 +177,8 @@ public abstract class LeapArray<T> {
                  */
                 return old;
             } else if (windowStart > old.windowStart()) {
+
+                // todo 此时说明数组环形数组更加新的时间段了 需要更新起始时间 重置统计信息为0
                 /*
                  *   (old)
                  *             B0       B1      B2    NULL      B4
@@ -195,6 +208,7 @@ public abstract class LeapArray<T> {
                     Thread.yield();
                 }
             } else if (windowStart < old.windowStart()) {
+                // TODO 这种场景出现是不正常的
                 // Should not go through here, as the provided time is already behind.
                 return new WindowWrap<T>(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));
             }
@@ -335,6 +349,7 @@ public abstract class LeapArray<T> {
 
         for (int i = 0; i < size; i++) {
             WindowWrap<T> windowWrap = array.get(i);
+            // 获取滑动时间窗口的关键
             if (windowWrap == null || isWindowDeprecated(timeMillis, windowWrap)) {
                 continue;
             }

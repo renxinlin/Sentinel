@@ -142,7 +142,8 @@ public class CtSph implements Sph {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         Context context = ContextUtil.getContext();
         if (context instanceof NullContext) {
-            // 当上下文超过数量 则直接返回一个entry 不在进行规则检查
+            // 当上下文超过数量 则直接返回一个entry 不在进行【限流】规则检查
+            // 一个请求挂一个线程  一个线程对应一个上下文  上下文数量超出阈值  说明请求数量超出阈值[也就是配置的单机限流值]
             // The {@link NullContext} indicates that the amount of context has exceeded the threshold,
             // so here init the entry only. No rule checking will be done.
             return new CtEntry(resourceWrapper, null, context);
@@ -150,24 +151,25 @@ public class CtSph implements Sph {
 
         if (context == null) {
             // Using default context.
-            // 使用默认上下文
+            // 当前ThreadLocal中没有则 使用默认上下文
             context = InternalContextUtil.internalEnter(Constants.CONTEXT_DEFAULT_NAME);
         }
 
         // Global switch is close, no rule checking will do.
         if (!Constants.ON) {
-            // 全局开关关闭则
+            // 全局开关关闭则不进行【限流降级等】规则检查
             return new CtEntry(resourceWrapper, null, context);
         }
         // 获取该资源对应的SlotChain[链表，责任链]
-        // 根据包装过的资源对象获取对应的SlotChain
+        // 根据包装过的资源对象获取对应的SlotChain 【也就是各个规则处理Slot】
         ProcessorSlot<Object> chain = lookProcessChain(resourceWrapper);
 
         /*
          * Means amount of resources (slot chain) exceeds {@link Constants.MAX_SLOT_CHAIN_SIZE},
          * so no rule checking will be done.
          */
-        //在生成chain的里面有个判断，如果chainMap.size大于一个值就返回null，也不进行规则检测
+        //在生成chain的里面有个判断，如果chainMap.size大于阈值就返回null【意味着chain的数量超过了上限】，也不进行规则检测
+
         if (chain == null) {
             return new CtEntry(resourceWrapper, null, context);
         }
@@ -248,6 +250,7 @@ public class CtSph implements Sph {
      * @return {@link ProcessorSlotChain} of the resource
      */
     ProcessorSlot<Object> lookProcessChain(ResourceWrapper resourceWrapper) {
+        // chainMap 是resourceWrapper的Slot的缓存
         ProcessorSlotChain chain = chainMap.get(resourceWrapper);
         if (chain == null) {
             synchronized (LOCK) {

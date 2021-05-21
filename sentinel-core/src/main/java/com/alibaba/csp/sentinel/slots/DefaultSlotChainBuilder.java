@@ -42,6 +42,10 @@ public class DefaultSlotChainBuilder implements SlotChainBuilder {
 
 
         /**
+         *
+         * 单向链表
+         *    first                     end
+         * DefaultProcessorSlotChain  -->  --> spi
          * spi结果:
          *
          * com.alibaba.csp.sentinel.slots.nodeselector.NodeSelectorSlot

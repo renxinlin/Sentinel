@@ -92,6 +92,13 @@ public class StatisticNode implements Node {
     /**
      * Holds statistics of the recent {@code INTERVAL} seconds. The {@code INTERVAL} is divided into time spans
      * by given {@code sampleCount}.
+     *
+     *
+     * 一个使用数组保存数据的计量器  秒为单位
+     *
+     *
+     * SampleCountProperty.SAMPLE_COUNT  指的是样本窗口数量 默认为2
+     * IntervalProperty.INTERVAL 时间窗长度 默认1000ms
      */
     private transient volatile Metric rollingCounterInSecond = new ArrayMetric(SampleCountProperty.SAMPLE_COUNT,
         IntervalProperty.INTERVAL);
@@ -99,6 +106,7 @@ public class StatisticNode implements Node {
     /**
      * Holds statistics of the recent 60 seconds. The windowLengthInMs is deliberately set to 1000 milliseconds,
      * meaning each bucket per second, in this way we can get accurate statistics of each second.
+     * 一个使用数组保存数据的计量器  分钟为单位
      */
     private transient Metric rollingCounterInMinute = new ArrayMetric(60, 60 * 1000, false);
 
@@ -198,6 +206,8 @@ public class StatisticNode implements Node {
 
     @Override
     public double passQps() {
+        // 获取统计数据用于限流
+        // qps = 当前时间窗口的统计数量/时间窗口大小
         return rollingCounterInSecond.pass() / rollingCounterInSecond.getWindowIntervalInSec();
     }
 
@@ -244,6 +254,7 @@ public class StatisticNode implements Node {
 
     @Override
     public void addPassRequest(int count) {
+        // 为滑动计数器增加本次访问数据
         rollingCounterInSecond.addPass(count);
         rollingCounterInMinute.addPass(count);
     }

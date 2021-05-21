@@ -138,7 +138,9 @@ public class DefaultNode extends StatisticNode {
 
     @Override
     public void addPassRequest(int count) {
+        // 增加资源在当前上下文的统计
         super.addPassRequest(count);
+        // 增加资源在全局的统计
         this.clusterNode.addPassRequest(count);
     }
 

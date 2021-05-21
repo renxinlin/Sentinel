@@ -126,8 +126,8 @@ public class ContextUtil {
      *
      *
      * 外部没有 Context  则使用这里创建内部Context
-     * @param name
-     * @param origin
+     * @param name  context Name
+     * @param origin 资源来源 【一般用消费者(上游)app的名称】
      * @return
      */
     protected static Context trueEnter(String name, String origin) {
@@ -146,11 +146,11 @@ public class ContextUtil {
         Context context = contextHolder.get();
         if (context == null) {
             // 如果ThreadLocal中获取不到Context
-            // 则根据name从map中获取根节点，只要是相同的资源名，就能直接从map中获取到node
-            Map<String, DefaultNode> localCacheNameMap = contextNameNodeMap;
+            // 则根据name从map中获取entranceNode，只要是相同的资源名，就能直接从map中获取到node
+            Map<String/*contextName*/, DefaultNode/*entranceNode*/> localCacheNameMap = contextNameNodeMap;
             DefaultNode node = localCacheNameMap.get(name);
             if (node == null) {
-
+                // 如果资源的数量大于最大的阈值  则返回NULL_CONTEXT
                 if (localCacheNameMap.size() > Constants.MAX_CONTEXT_NAME_SIZE) {
                     setNullContext();
                     return NULL_CONTEXT;
@@ -163,10 +163,19 @@ public class ContextUtil {
                                 setNullContext();
                                 return NULL_CONTEXT;
                             } else {
+
+                                // 添加entranceNode到Root节点
                                 node = new EntranceNode(new StringResourceWrapper(name, EntryType.IN), null);
                                 // Add entrance node.
                                 Constants.ROOT.addChild(node);
 
+
+                                /**
+                                 * 小技巧:
+                                 * 新建node写入缓存map
+                                 * 为了防止"迭代稳定性问题" iterate stable 对共享集合的写操作采用COW
+                                 *
+                                 */
                                 Map<String, DefaultNode> newMap = new HashMap<>(contextNameNodeMap.size() + 1);
                                 newMap.putAll(contextNameNodeMap);
                                 newMap.put(name, node);

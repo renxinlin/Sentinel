@@ -35,6 +35,7 @@ import com.alibaba.csp.sentinel.util.function.Predicate;
  */
 public class ArrayMetric implements Metric {
 
+    // 使用滑动窗口统计数据
     private final LeapArray<MetricBucket> data;
 
     public ArrayMetric(int sampleCount, int intervalInMs) {
@@ -108,8 +109,10 @@ public class ArrayMetric implements Metric {
     public long pass() {
         data.currentWindow();
         long pass = 0;
-        List<MetricBucket> list = data.values();
 
+        // 获取当前的滑动时间窗口
+        List<MetricBucket> list = data.values();
+        // 对滑动时间窗口里的所有样本窗口数据进行累加
         for (MetricBucket window : list) {
             pass += window.pass();
         }
@@ -241,7 +244,9 @@ public class ArrayMetric implements Metric {
 
     @Override
     public void addPass(int count) {
+        // 当前样本窗口
         WindowWrap<MetricBucket> wrap = data.currentWindow();
+        // 窗口的统计数据 添加请求的技术量
         wrap.value().addPass(count);
     }
 

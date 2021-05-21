@@ -26,7 +26,9 @@ import com.alibaba.csp.sentinel.slots.statistic.base.LongAdder;
  * @author Eric Zhao
  */
 public class MetricBucket {
-
+    /** 统计的数据放在这里 包含多个维度信息
+     * 这些维度在枚举MetricEvent
+     */
     private final LongAdder[] counters;
 
     private volatile long minRt;

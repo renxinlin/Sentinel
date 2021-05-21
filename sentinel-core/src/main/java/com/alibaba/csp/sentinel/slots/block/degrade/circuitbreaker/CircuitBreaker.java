@@ -23,6 +23,9 @@ import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRule;
  * <p>Basic <a href="https://martinfowler.com/bliki/CircuitBreaker.html">circuit breaker</a> interface.</p>
  *
  * @author Eric Zhao
+ * 将三种熔断策略 慢调用比例  异常比例  异常数 封装为两种CircuitBreaker
+ * ExceptionCircuitBreaker
+ * ResponseTimeCircuitBreaker
  */
 public interface CircuitBreaker {
 
@@ -61,10 +64,18 @@ public interface CircuitBreaker {
      */
     enum State {
         /**
+         *
+         *
+         * 所有请求都会熔断
          * In {@code OPEN} state, all requests will be rejected until the next recovery time point.
          */
         OPEN,
         /**
+         *
+         * 半开规则:
+         *
+         *
+         *
          * In {@code HALF_OPEN} state, the circuit breaker will allow a "probe" invocation.
          * If the invocation is abnormal according to the strategy (e.g. it's slow), the circuit breaker
          * will re-transform to the {@code OPEN} state and wait for the next recovery time point;
@@ -73,6 +84,9 @@ public interface CircuitBreaker {
          */
         HALF_OPEN,
         /**
+         *
+         *
+         * 所有请求都会通过
          * In {@code CLOSED} state, all requests are permitted. When current metric value exceeds the threshold,
          * the circuit breaker will transform to {@code OPEN} state.
          */

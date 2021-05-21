@@ -154,7 +154,7 @@ public class NodeSelectorSlot extends AbstractLinkedProcessorSlot<Object> {
          */
         /**
          *  // 根据「上下文」的名称获取DefaultNode
-         *     // 多线程环境下，每个线程都会创建一个context，
+         *     // 多线程环境下，每个线程都会创建一个context，但是一个context可能用于多个线程上下文
          *     // 只要资源名相同，则context的名称也相同，那么获取到的节点就相同
          */
         DefaultNode node = map.get(context.getName());

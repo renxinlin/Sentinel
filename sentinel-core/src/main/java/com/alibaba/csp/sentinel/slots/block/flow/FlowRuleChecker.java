@@ -15,14 +15,12 @@
  */
 package com.alibaba.csp.sentinel.slots.block.flow;
 
-import java.util.Collection;
-
 import com.alibaba.csp.sentinel.cluster.ClusterStateManager;
-import com.alibaba.csp.sentinel.cluster.server.EmbeddedClusterTokenServerProvider;
-import com.alibaba.csp.sentinel.cluster.client.TokenClientProvider;
-import com.alibaba.csp.sentinel.cluster.TokenResultStatus;
 import com.alibaba.csp.sentinel.cluster.TokenResult;
+import com.alibaba.csp.sentinel.cluster.TokenResultStatus;
 import com.alibaba.csp.sentinel.cluster.TokenService;
+import com.alibaba.csp.sentinel.cluster.client.TokenClientProvider;
+import com.alibaba.csp.sentinel.cluster.server.EmbeddedClusterTokenServerProvider;
 import com.alibaba.csp.sentinel.context.Context;
 import com.alibaba.csp.sentinel.log.RecordLog;
 import com.alibaba.csp.sentinel.node.DefaultNode;
@@ -33,6 +31,8 @@ import com.alibaba.csp.sentinel.slots.block.RuleConstant;
 import com.alibaba.csp.sentinel.slots.clusterbuilder.ClusterBuilderSlot;
 import com.alibaba.csp.sentinel.util.StringUtil;
 import com.alibaba.csp.sentinel.util.function.Function;
+
+import java.util.Collection;
 
 /**
  * Rule checker for flow control rules.
@@ -46,9 +46,12 @@ public class FlowRuleChecker {
         if (ruleProvider == null || resource == null) {
             return;
         }
+        // 获取所有的流控规则 通过flowRuleManager 获取资源的所有规则
+        // com.alibaba.csp.sentinel.util.function.Function.apply
         Collection<FlowRule> rules = ruleProvider.apply(resource.getName());
         if (rules != null) {
             for (FlowRule rule : rules) {
+                // 没有通过流控则抛出异常  流控规则和node中的统计信息比较
                 if (!canPassCheck(rule, context, node, count, prioritized)) {
                     throw new FlowException(rule.getLimitApp(), rule);
                 }
@@ -63,25 +66,33 @@ public class FlowRuleChecker {
 
     public boolean canPassCheck(/*@NonNull*/ FlowRule rule, Context context, DefaultNode node, int acquireCount,
                                                     boolean prioritized) {
+
+        // 来源 从规则中获取限定的来源 一般为default 来源null说明是发出请求 不是别人请求我的资源
         String limitApp = rule.getLimitApp();
+        // 流控规则 flowRule默认default 其他规则基本没有默认值
         if (limitApp == null) {
             return true;
         }
-
+        // 集群流控处理
         if (rule.isClusterMode()) {
             return passClusterCheck(rule, context, node, acquireCount, prioritized);
         }
-
+        // 单机流控处理
         return passLocalCheck(rule, context, node, acquireCount, prioritized);
     }
 
     private static boolean passLocalCheck(FlowRule rule, Context context, DefaultNode node, int acquireCount,
                                           boolean prioritized) {
+        // 根据规则[来源 限流策略等]获取正确的统计node
         Node selectedNode = selectNodeByRequesterAndStrategy(rule, context, node);
         if (selectedNode == null) {
             return true;
         }
-
+        // 根据规则进行逐项检查 流控效果
+        //        DefaultController 快速失败
+        //                RateLimiterController
+        //        WarmUpController 令牌桶
+        //                WarmUpRateLimiterController
         return rule.getRater().canPass(selectedNode, acquireCount, prioritized);
     }
 
@@ -113,12 +124,14 @@ public class FlowRuleChecker {
     }
 
     static Node selectNodeByRequesterAndStrategy(/*@NonNull*/ FlowRule rule, Context context, DefaultNode node) {
-        // The limit app should not be empty.
+        // The limit app should not be empty.  通常是default
         String limitApp = rule.getLimitApp();
         int strategy = rule.getStrategy();
+        // 通常是空字符串
         String origin = context.getOrigin();
 
         if (limitApp.equals(origin) && filterOrigin(origin)) {
+
             if (strategy == RuleConstant.STRATEGY_DIRECT) {
                 // Matches limit origin, return origin statistic node.
                 return context.getOriginNode();
@@ -126,11 +139,12 @@ public class FlowRuleChecker {
 
             return selectReferenceNode(rule, context, node);
         } else if (RuleConstant.LIMIT_APP_DEFAULT.equals(limitApp)) {
+            // 直接 限流 返回当前节点的所有上下文中的限流统计信息
             if (strategy == RuleConstant.STRATEGY_DIRECT) {
                 // Return the cluster node.
                 return node.getClusterNode();
             }
-
+            // 一般走这里
             return selectReferenceNode(rule, context, node);
         } else if (RuleConstant.LIMIT_APP_OTHER.equals(limitApp)
             && FlowRuleManager.isOtherOrigin(origin, rule.getResource())) {

@@ -24,6 +24,7 @@ import com.alibaba.csp.sentinel.util.TimeUtil;
 
 /**
  * Default throttling controller (immediately reject strategy).
+ * 快速失败流控
  *
  * @author jialiang.linjl
  * @author Eric Zhao
@@ -47,8 +48,16 @@ public class DefaultController implements TrafficShapingController {
 
     @Override
     public boolean canPass(Node node, int acquireCount, boolean prioritized) {
+        // 判断qps和阈值的大小关系
+
+
+
+        // 获取当前时间窗中已经统计的数据
         int curCount = avgUsedTokens(node);
+        // 超过阈值 限流
         if (curCount + acquireCount > count) {
+
+            // todo 有优先权
             if (prioritized && grade == RuleConstant.FLOW_GRADE_QPS) {
                 long currentTime;
                 long waitInMs;
@@ -69,9 +78,11 @@ public class DefaultController implements TrafficShapingController {
     }
 
     private int avgUsedTokens(Node node) {
+        // 说明前置没有创建node 直接返回0
         if (node == null) {
             return DEFAULT_AVG_USED_TOKENS;
         }
+        // 阈值类型是qps还是线程数  返回当前已经统计的线程数量 或者qps数量
         return grade == RuleConstant.FLOW_GRADE_THREAD ? node.curThreadNum() : (int)(node.passQps());
     }
 
